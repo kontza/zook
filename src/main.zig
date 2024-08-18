@@ -7,49 +7,24 @@ const c = @cImport({
     @cInclude("sys/event.h");
 });
 
-const PROGRAM_NAME = "phook";
-const PROGRAM_VERSION = "0.08";
+const PROGRAM_NAME = "zook";
+const PROGRAM_VERSION = "1.0.0";
+const AFTER = "after";
+const EXECUTE = "execute";
+const PROCESS = "process";
+const VERSION = "version";
+
 const App = yazap.App;
 const Arg = yazap.Arg;
-var after: ?*const u8 = null;
-
-fn copyright() void {
-    // std.log.info(
-    //     \\Copyright (C) 2017 Ivan Drinchev
-    //     \\This software may be modified and distributed
-    //     \\under the terms of the MIT license.
-    // , .{});
-}
-
-fn usage(status: u32) !void {
-    if (status != 0) {
-        std.log.info("Try '{} --help' for more information.\n", .{PROGRAM_NAME});
-    } else {
-        std.log.info("Usage: {} [OPTION]...\n", .{PROGRAM_NAME});
-        std.log.info("Runs a command after a parent process has finished.\n\n", .{});
-        std.log.info(
-            \\Mandatory arguments to long options are mandatory for short options too
-            \\  -a, --after=COMMAND        executes command after the parent process has ended
-            \\  -e, --execute=COMMAND      executes command on start
-            \\  -p, --process=PID          waits for PID to exit instead of parent process
-            \\  -h, --help                 display this help and exit
-            \\      --version              output version information and exit
-        , .{});
-        copyright();
-    }
-    std.c.exit(status);
-}
+var after: []const u8 = "";
 
 fn version() void {
-    // std.log.info("{} {}\n", .{ PROGRAM_NAME, PROGRAM_VERSION });
-    copyright();
+    std.debug.print("{s} {s}\n", .{ PROGRAM_NAME, PROGRAM_VERSION });
     std.c.exit(0);
 }
 
 fn sigint_handler(_: c_int) callconv(.C) void {
-    if (after) |cmd| {
-        _ = c.system(cmd);
-    }
+    _ = c.system(after.ptr);
     std.c.exit(0);
 }
 
@@ -65,13 +40,20 @@ pub fn main() !void {
     _ = c.signal(std.c.SIG.INT, sigint_handler);
     _ = c.signal(std.c.SIG.PIPE, sigint_handler);
 
-    var app = App.init(allocator, "zook", "Runs a command after a parent process has finished");
+    var app = App.init(allocator, PROGRAM_NAME, "Runs a command after a parent process has finished");
     defer app.deinit();
     var zook = app.rootCommand();
-    try zook.addArg(Arg.booleanOption("version", null, null));
+    try zook.addArg(Arg.booleanOption(VERSION, null, null));
+    try zook.addArg(Arg.singleValueOption(AFTER, 'a', "executes command after the parent process has ended"));
+    try zook.addArg(Arg.singleValueOption(EXECUTE, 'e', "executes command on start"));
+    try zook.addArg(Arg.singleValueOption(PROCESS, 'p', "waits for for the given PID to exit instead of parent process"));
+
     const matches = try app.parseProcess();
-    if (matches.containsArg("version")) {
+    if (matches.containsArg(VERSION)) {
         version();
+    }
+    if (matches.getSingleValue(AFTER)) |cmd| {
+        after = cmd;
     }
 
     // const args = [][]const u8;
@@ -102,7 +84,7 @@ pub fn main() !void {
         std.c.exit(1);
     }
 
-    if (after != null) {
+    if (after.len == 0) {
         std.c.exit(0);
     }
 
@@ -136,7 +118,7 @@ pub fn main() !void {
     }
 
     if (kev.data > 0) {
-        acode = c.system(after);
+        acode = c.system(after.ptr);
     }
 
     if (acode > 0) {
