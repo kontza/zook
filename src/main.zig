@@ -19,7 +19,8 @@ const Arg = yazap.Arg;
 var after: []const u8 = "";
 
 fn version() void {
-    std.debug.print("{s} {s}\n", .{ PROGRAM_NAME, PROGRAM_VERSION });
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("{s} v{s}\n", .{ PROGRAM_NAME, PROGRAM_VERSION }) catch return;
     std.c.exit(0);
 }
 
@@ -31,7 +32,6 @@ fn sigint_handler(_: c_int) callconv(.C) void {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    const execute: ?*const u8 = null;
     var acode: i32 = 0;
     var ecode: i32 = 0;
     var ppid: c_int = 0;
@@ -76,8 +76,8 @@ pub fn main() !void {
     //     }
     // }
 
-    if (execute != null) {
-        ecode = c.system(execute);
+    if (matches.getSingleValue(EXECUTE)) |execute| {
+        ecode = c.system(execute.ptr);
     }
 
     if (ecode > 0) {
@@ -100,7 +100,7 @@ pub fn main() !void {
     // Set up kqueue and wait for the parent process to exit
     const kq = c.kqueue();
     if (kq == -1) {
-        std.log.info("kqueue failed\n", .{});
+        std.log.err("kqueue failed\n", .{});
         std.c.exit(1);
     }
 
@@ -108,12 +108,12 @@ pub fn main() !void {
     var kev = c.struct_kevent{ .ident = @intCast(ppid), .filter = c.EVFILT_PROC, .flags = c.EV_ADD, .fflags = c.NOTE_EXIT, .data = 0, .udata = null };
 
     if (c.kevent(kq, &kev, 1, null, 0, null) == -1) {
-        std.log.info("kevent failed\n", .{});
+        std.log.err("kevent failed\n", .{});
         std.c.exit(1);
     }
 
     if (c.kevent(kq, null, 0, &kev, 1, &timeout) == -1) {
-        std.log.info("kevent failed\n", .{});
+        std.log.err("kevent failed\n", .{});
         std.c.exit(1);
     }
 
