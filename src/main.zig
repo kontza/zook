@@ -25,6 +25,7 @@ fn version() void {
 }
 
 fn sigint_handler(_: c_int) callconv(.C) void {
+    std.log.info("Would call '{s}'", .{after});
     _ = c.system(after.ptr);
     std.c.exit(0);
 }
@@ -37,8 +38,10 @@ pub fn main() !void {
     var ppid: c_int = 0;
     var fpid: i32 = 0;
 
-    _ = c.signal(std.c.SIG.INT, sigint_handler);
-    _ = c.signal(std.c.SIG.PIPE, sigint_handler);
+    var sig_ret = c.signal(std.c.SIG.INT, sigint_handler);
+    std.log.info("Setting SIGINT handler returned '{?}'", .{sig_ret});
+    sig_ret = c.signal(std.c.SIG.PIPE, sigint_handler);
+    std.log.info("Setting SIGPIPE handler returned '{?}'", .{sig_ret});
 
     var app = App.init(allocator, PROGRAM_NAME, "Runs a command after a parent process has finished");
     defer app.deinit();
@@ -54,6 +57,7 @@ pub fn main() !void {
     }
     if (matches.getSingleValue(AFTER)) |cmd| {
         after = cmd;
+        std.log.info("Stored '{s}' as _after_.", .{after});
     }
 
     // const args = [][]const u8;
@@ -78,10 +82,10 @@ pub fn main() !void {
 
     if (matches.getSingleValue(EXECUTE)) |execute| {
         ecode = c.system(execute.ptr);
-    }
-
-    if (ecode > 0) {
-        std.c.exit(1);
+        if (ecode > 0) {
+            std.log.err("Failed to call '{s}'!", .{execute});
+            std.c.exit(1);
+        }
     }
 
     if (after.len == 0) {
@@ -90,6 +94,7 @@ pub fn main() !void {
 
     if (ppid == 0) {
         ppid = c.getppid();
+        std.log.info("Got parent PID '{?}'", .{ppid});
     }
 
     fpid = c.fork();
