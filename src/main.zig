@@ -105,28 +105,33 @@ pub fn main() !void {
     // Set up kqueue and wait for the parent process to exit
     const kq = c.kqueue();
     if (kq == -1) {
-        std.log.err("kqueue failed\n", .{});
+        std.log.err("Failed to acquire kqueue\n", .{});
         std.c.exit(1);
     }
 
     const timeout = c.timespec{ .tv_sec = 8 * 60 * 60, .tv_nsec = 0 };
     var kev = c.struct_kevent{ .ident = @intCast(ppid), .filter = c.EVFILT_PROC, .flags = c.EV_ADD, .fflags = c.NOTE_EXIT, .data = 0, .udata = null };
 
-    if (c.kevent(kq, &kev, 1, null, 0, null) == -1) {
-        std.log.err("kevent failed\n", .{});
+    var kret = c.kevent(kq, &kev, 1, null, 0, null);
+    if (kret == -1) {
+        std.log.err("Failed to set an event listener\n", .{});
+        std.c.exit(1);
+    }
+    std.log.debug("kev before listen: {?}", .{kev});
+
+    kret = c.kevent(kq, null, 0, &kev, 1, &timeout);
+    if (kret == -1) {
+        std.log.err("Failed to listen to NOTE_EXIT event\n", .{});
         std.c.exit(1);
     }
 
-    if (c.kevent(kq, null, 0, &kev, 1, &timeout) == -1) {
-        std.log.err("kevent failed\n", .{});
-        std.c.exit(1);
-    }
-
-    if (kev.data > 0) {
+    std.log.debug("kev after listen: {?}", .{kev});
+    if (kret > 0) {
         acode = c.system(after.ptr);
     }
 
     if (acode > 0) {
+        std.log.err("Failed to call 'after'; call returned {}", .{acode});
         std.c.exit(1);
     }
 
